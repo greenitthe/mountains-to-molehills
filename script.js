@@ -61,6 +61,14 @@ $(document).ready(function() {
 
   worldStack[activeWorld].gameObjects.tiles.interactables.plots['plot0'] = new Plot("plot0", 172, 144, 128, 128, 'images/grass-plot-128.png', ["<todo: add allowed>"]);
 
+  //TODO: small village tool tip
+  worldStack[activeWorld].gameObjects.tiles.interactables.UI['smallVillageButton'] = new Button("smallVillageButton", 32, 432, 96, 96, "images/village128-Button.png", "TODO: small village tool tip", "images/village128-ButtonSelected.png", ['village'], buttonInteract);
+  worldStack[activeWorld].gameObjects.tiles.interactables.UI['smallOvenButton'] = new Button("smallOvenButton", 160, 432, 96, 96, "images/ovenT1-Button.png", "TODO: small oven tool tip", "images/ovenT1-ButtonSelected.png", ['oven'], buttonInteract);
+
+  //TODO: poptext tooltip
+  worldStack[activeWorld].gameObjects.tiles.interactables.UI['populationTextBox'] = new TextBox("populationTextBox", canvas.width/100, canvas.height/6, "TODO: poptext tooltip", "Population: ", "population");
+  worldStack[activeWorld].gameObjects.tiles.interactables.UI['foodTextBox'] = new TextBox("foodTextBox", canvas.width/100, canvas.height/4, "TODO: foodtext tooltip", "Food: ", "food");
+
   /**************
    ** THE REST **
    **************/
@@ -160,19 +168,21 @@ $(document).ready(function() {
   }
   //Shortcut for UI that is only a textbox
   //phrase = STR to say in the textbox
-  function TextBox(name, x, y, tooltip, phrase) {
+  function TextBox(name, x, y, tooltip, phrase, resourceName) {
     UI.call(this, name, x, y, 0, 0, "", textboxDraw, tooltip, emptyFunc);
     this.tags.push("textbox");
 
     this.phrase = phrase;
+    this.resourceName = resourceName;
   }
   //Shortcut for UI that is a button
   //selectedImage = STR with location of image when hovered over
-  function Button(name, x, y, width, height, eImage, tooltip, selectedImage, interact) {
+  function Button(name, x, y, width, height, eImage, tooltip, selectedImage, typeContained, interact) {
     UI.call(this, name, x, y, width, height, eImage, buttonDraw, tooltip, interact);
     this.tags.push("button");
 
     this.selectedImage = createImage(selectedImage);
+    this.typeContained = typeContained;
   }
 
   /**
@@ -275,7 +285,7 @@ $(document).ready(function() {
             mY > item.y &&
             mY < item.y + item.height) {
           item.interact();
-          if (item.tags.inArray("Plot")) {
+          if ($.inArray("Plot", item.tags) >= 0) {
             //TODO: Implement what happens when 'dropping' held item
             console.log("TODO: Implement what happens when 'dropping' held item");
           }
@@ -284,112 +294,17 @@ $(document).ready(function() {
     });
   });
 
-  /*
-  Static(image, x, y, width, height)
-    => Static(name, x, y, width, height, eImage, drawStyle)
-  Tile(image, x, y, width, height, action)
-    => actions moved to resources
-  Plot(x, y, width, height, allowed) {
-    => im thinking about it...
-  }
-  */
-  /*****************/
-
-  function Counter(phrase, x, y, update) {
-    this.phrase = phrase,
-    this.x = x,
-    this.y = y,
-    this.update = update,
-    this.draw = function() {
-      //ctx.font="30px 8-BIT"
-      ctx.font="30px Arial"
-      ctx.fillStyle="#fff"
-      ctx.fillText(this.update() + " " + this.phrase, this.x, this.y)
-    }
-  }
-  //village0
-  buttons.push(new Button(createImage("images/village128-Button.png"), createImage("images/village128-ButtonSelected.png"), 32, 432,96,96,function() {
-    if (dragging != null) {
-      dragging.abort();
-      dragging = null;
-    }
-    dragging = new DragObject('village0', 'village1', createImage("images/village256.png"), mX, mY,96,96,mX-this.x,mY-this.y);
-    tiles.push(dragging);
-
-  }));
-  //farm
-  buttons.push(new Button(createImage("images/ovenT1-Button.png"), createImage("images/ovenT1-ButtonSelected.png"), 160, 432,96,96,function() {
-    if (dragging != null) {
-      dragging.abort();
-      dragging = null;
-    }
-    dragging = new DragObject('farm', 'ranch', createImage("images/ovenT1.png"), mX, mY,96,96,mX-this.x,mY-this.y);
-    tiles.push(dragging);
-
-  }));
-
-  texts.push(new Counter("Population", canvas.width/100, canvas.height/6, function () { return resources.filter(function(item) {return item.name == "Population"})[0].value }))
-  texts.push(new Counter("Food", canvas.width/100, canvas.height/4, function () { return resources.filter(function(item) {return item.name == "Food"})[0].value }))
-  //function Tile(image, x, y, width, height, action)
-  /** set up the sky fills in an array for the draw loop **/
-  //sky
-  for (var ix = 0; ix <= canvas.width; ix+=32) {
-    for (var iy = 0; iy <= canvas.height; iy+=32) {
-      statics.push(new Static(createImage("images/grass-32.png"), ix, iy, 32, 32))
-    }
-  }
-
-  function subtractDatesInSeconds(dold,dnew) {
-    return Math.floor((dnew-dold)/1000)
-  }
-
-  function gameLoop() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle="#da9538";
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-    //add to animation delay or trigger next animation
-    delay >= 10 ? (delay = 0,
-                    animateFrame()) : ++delay;
-    if (subtractDatesInSeconds(lastResTick,new Date().getTime()) >= 1) {
-      lastResTick = new Date().getTime();
-      resources.map(function(item) {item.checkIncrement();});
-    }
-    statics.map(function(item) {item.draw();});
-    plots.map(function(item) {item.draw();});
-    plots.map(function(item) {item.action();});
-    buttons.map(function(item) {item.draw();});
-    tiles.map(function(item) {item.action();});
-    tiles.map(function(item) {item.draw();});
-    texts.map(function(item) {item.draw();});
-    drawPlayerTile(0,0,state);
-  }
-
-  function animateFrame() {
-    state = state >= 7 ? 0 : ++state;
-  }
-
-  //animated tile - old code, refactor when animation becomes important
-  function drawPlayerTile(x,y,tileNum) {
-    //Currently involves a wrapper, for any tile past 10, it assumes a new line down in the y axis
-    var tileWidth = 64;
-    var tileHeight = tileWidth;
-
-    var playerSprites = new Image();
-    playerSprites.src = "images/playerCharacter.png"
-
-    drawTile(playerSprites, (tileNum % 10) * tileWidth, Math.floor(tileNum/10) * tileHeight, x, y, tileWidth, tileHeight);
-  }
-  function drawTile(spriteSrc,tileX,tileY,x,y,tileWidth,tileHeight) {
-    ctx.drawImage(spriteSrc, tileX, tileY, tileWidth, tileHeight, x, y, tileWidth, tileHeight);
-  }
-
-  /*****************/
   function mainLoop() {
     //get active world
     aWorld = worldStack[activeWorld];
 
     //clear the screen
     clear();
+
+    if (subtractDatesInSeconds(lastResTick, new Date().getTime()) >= 1) {
+      lastResTick = new Date().getTime();
+      $.each(resources, function (key, item) { item.checkIncrement(); })
+    }
 
     //move everything as needed
     $.each(aWorld.gameObjects.tiles.interactables.entities, function(key, value) {
@@ -458,24 +373,24 @@ $(document).ready(function() {
     ctx.fillRect(this.minX, this.minY, this.maxX, this.maxY);
 
     var tilesObj = this.gameObjects.tiles;
-    if (Object.keys(tilesObj.statics) > 0) {
-      $.each(this.gameObjects.tiles.statics, justDraw(key, value));
+    if (Object.keys(tilesObj.statics).length > 0) {
+      $.each(this.gameObjects.tiles.statics, justDraw);
     }
-    if (Object.keys(tilesObj.interactables.plots) > 0) {
-      $.each(this.gameObjects.tiles.interactables.plots, justDraw(key, value));
+    if (Object.keys(tilesObj.interactables.plots).length > 0) {
+      $.each(this.gameObjects.tiles.interactables.plots, justDraw);
     }
-    if (Object.keys(tilesObj.interactables.entities) > 0) {
-      $.each(this.gameObjects.tiles.interactables.entities, justDraw(key, value));
+    if (Object.keys(tilesObj.interactables.entities).length > 0) {
+      $.each(this.gameObjects.tiles.interactables.entities, justDraw);
     }
-    if (Object.keys(tilesObj.interactables.UI) > 0) {
-      $.each(this.gameObjects.tiles.interactables.UI, justDraw(key, value));
+    if (Object.keys(tilesObj.interactables.UI).length > 0) {
+      $.each(this.gameObjects.tiles.interactables.UI, justDraw);
     }
   }
 
   function plotDraw() {
     ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
 
-    if (held != null && this.allowed.filter(function(item) { return held.tags.inArray(item); }).length > 0) {
+    if (held != null && this.allowed.filter(function(item) { return $.inArray(item, held.tags); }).length > 0) {
       ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
     }
   }
@@ -484,7 +399,7 @@ $(document).ready(function() {
     //ctx.font="30px 8-BIT"
     ctx.font="30px Arial"
     ctx.fillStyle="#fff"
-    ctx.fillText(this.phrase, this.x, this.y)
+    ctx.fillText(this.phrase + resources[this.resourceName], this.x, this.y)
   }
 
   function buttonDraw() {
@@ -530,13 +445,14 @@ $(document).ready(function() {
   //MHover AIs
   function plotMHover() {
     if (held != null &&
-        this.allowed.filter(function(item) { return held.tags.inArray(item); }).length > 0) { //if held over a valid plot
+        this.allowed.filter(function(item) { return $.inArray(item, held.tags); }).length > 0) { //if held over a valid plot
       ctx.drawImage(createImage("images/highlight.png"), this.x, this.y, this.width, this.height)
     }
     else if (held == null) { //if mouse over but not held
       ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
     }
   }
+
   function UIHover() {
     //TODO: tooltip on hovered
     console.log("TODO: tooltip on hovered");
@@ -558,7 +474,7 @@ $(document).ready(function() {
     $.each(worldStack[activeWorld].gameObjects.tiles.interactables.plots, function (key, value) {
       if (mouseIn(value.x, value.y, value.x + value.width, value.y + value.height)) {
         for (var item in value.allowed) {
-          if (this.tags.inArray(item)) {
+          if ($.inArray(item, this.tags)) {
             value.image = this.image;
             //TODO: figure out how to handle tags at this point
             console.log("TODO: figure out how to handle tags at this point");
@@ -567,6 +483,14 @@ $(document).ready(function() {
       }
     });
     this.abort();
+  }
+
+  function buttonInteract() {
+    if (held != null) {
+      held.abort();
+    }
+    held = new DragObject(this.tags[0], mX, mY, 96, 96, this.image.src, draggingMove, typeContained, mX - this.x, mY - this.y);
+    worldStack[activeWorld].gameObjects.tiles.interactables.entities[this.tags[0]] = held;
   }
 
   //Resource AIs
@@ -640,12 +564,16 @@ $(document).ready(function() {
 
   function emptyFunc() { return; }
 
+  function subtractDatesInSeconds(dold,dnew) {
+    return Math.floor((dnew-dold)/1000)
+  }
+
   //returns the number of occurrences of the searched-for tag in plots
   function numInPlots(searchStr) {
     var ret = 0;
     keyArr = Object.keys(worldStack[activeWorld].gameObjects.tiles.interactables.plots);
     for (var key in keyArr) {
-      if (worldStack[activeWorld].gameObjects.tiles.interactables.plots[key].tags.inArray(searchStr)) {
+      if ($.inArray(searchStr, worldStack[activeWorld].gameObjects.tiles.interactables.plots[keyArr[key]].tags) >= 0) {
         ++ret;
       }
     }
