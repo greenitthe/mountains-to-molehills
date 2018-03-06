@@ -7,23 +7,11 @@ TODO:
 PLANNING:
  - each building can be entered and has upgrades therein that are clickable
    while character is animated doing something (drinking, talking, etc) location-appropriate
+NOTE:
+ - expecting to change dragging into someting checked by the interact method of interactables
 */
 
-/*********************************
- ** Global Variable Definitions **
- *********************************/
-//DOM elements
-var canvas = $('#gameCanvas')[0];
-var ctx = canvas.getContext("2d");
-
-var keys = {};
-
-var worldStack = {};
-worldStack['town'] = (new World("town", basicWorldDraw("sky.png"), 0, 0, canvas.width, canvas.height)
-var activeWorld = "town";
-
-/* ^^^^^^^^^^^^^^
-*** hierarchy ***
+/* HIERARCHY
 world{}: each 'world' is effectively a screen
 ex: town (outdoors), tavern, home, etc.
 - GameObject(): most basic form of object, doesn't accept draw
@@ -36,26 +24,78 @@ ex: town (outdoors), tavern, home, etc.
 - - colliders{GameObject}: non-renderable GameObjects, block movement if in this object
 */
 
-var mX;
-var mY;
+function init() {
+  /*********************************
+   ** Global Variable Definitions **
+   *********************************/
+  //DOM elements
+  var canvas = $('#gameCanvas')[0];
+  var ctx = canvas.getContext("2d");
+
+  var keys = {};
+
+  var worldStack = {};
+
+  var mX;
+  var mY;
+
+  $("#gameCanvas").bind('mousemove', function(e) {
+    mX = Math.round(e.pageX - $(this).offset().left);
+    mY = Math.round(e.pageY - $(this).offset().top);
+  });
+
+
+  var resources = {};
+  var lastResTick = new Date().getTime();
+
+  //what object is currently held by the mouse
+  var held = null;
+
+  //Initializing town world
+  worldStack['town'] = new World("town", basicWorldDraw("sky.png"), 0, 0, canvas.width, canvas.height);
+  var activeWorld = 'town';
+  resources['population'] = new Resource("Population", 0, 5, false, popResAI);
+  resources['food'] = new Resource("Food", 0, 100, false, foodResAI);
+}
+
+/**
+Resource = an item that can be incremented
+name = STR name of the object
+value = INT how much of the object is owned
+capacity = INT how much of the object can be owned currently
+isVisible = BOOL whether object is discovered yet
+checkIncrement = FUNC dictating when to increment
+**/
+function Resource(name, value, capacity, isVisible, checkIncrement) {
+  this.name = name,
+  this.value = value,
+  this.capacity = capacity,
+  this.isVivisble = isVisible,
+  this.checkIncrement = checkIncrement
+}
 
 /**
 GameObject = most basic form of object
-name = STR name of object
+tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
 x, y = INT coords
 width, height = INT img width, height
 **/
 function GameObject(name, x, y, width, height) {
-  this.name = name;
+  this.tags = [name, "gameObject"];
   this.x = x;
   this.y = y;
   this.width = width;
   this.height = height;
 }
+//Shortcut for GameObject with Collider tag
+function Collider(name, x, y, width, height) {
+  GameObject.call(this, name, x, y, width, height);
+  this.tags.append("collider");
+}
 
 /**
 Tile = a renderable object that can be placed into the world
-name = STR name of object
+tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
 x, y = INT coords
 width, height = INT img width, height
 eImage = STR location to image source for entity
@@ -63,16 +103,22 @@ drawStyle = FUNC function dictating how the entity should be drawn
 **/
 function Tile(name, x, y, width, height, eImage, drawStyle) {
   GameObject.call(this, name, x, y, width, height);
+  this.tags.append("tile");
 
-  this.image = new Image();
-  this.image.src = eImage;
+  this.image = createImage(eImage);
 
-  this.draw() = drawStyle;
+  this.draw = drawStyle;
+}
+//Shortcut for Tile with Static tag
+function Static(name, x, y, width, height, eImage, drawStyle) {
+  Tile.call(this, name, x, y, width, height, eImage, drawStyle);
+
+  this.tags.append('static');
 }
 
 /**
 Interactable = a Tile that can be hovered over and interacted with
-name = STR name of object
+tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
 x, y = INT coords
 width, height = INT img width, height
 eImage = STR location to image source for entity
@@ -83,15 +129,27 @@ interact = FUNC dictating how to behave when interacted with
 **/
 function Interactable(name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact) {
   Tile.call(this, name, x, y, width, height, eImage, drawStyle);
+  this.tags.append("interactable");
 
-  this.mHover() = mhover;
-  this.cHover() = cHover;
-  this.interact() = interact;
+  this.mHover = mhover;
+  this.cHover = cHover;
+  this.interact = interact;
 }
+//Shortcut for Interactable with Plot tag
+function Plot(name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact) {
+  Interactable.call(this, name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact);
+  this.tags.append("plot");
+}
+//Shortcut for Interactable with UI tag
+function UI(name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact) {
+  Interactable.call(this, name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact);
+  this.tags.append("UI");
+}
+
 
 /**
 Entity = an Interactable that can move
-name = STR name of object
+tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
 x, y = INT coords
 width, height = INT img width, height
 eImage = STR location to image source for entity
@@ -103,19 +161,20 @@ move = FUNC dictating how to move
 **/
 function Entity(name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact, move) {
   Interactable.call(this, name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact);
+  this.tags.append("entity");
 
-  this.move() = move;
+  this.move = move;
 }
 
 /**
 World = an object containing all variables of the given World
-name = STR name of World
+tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
 drawStyle = FUNC dictating how to draw world bg
 x,y,mX,mY = INT dictating starting x,y of the window and maxX, maxY of the world
 **/
 function World(name, drawStyle, x, y, mX, mY) {
-  this.name = name;
-  this.draw() = drawStyle;
+  this.tags = [name, "world"];
+  this.draw = drawStyle;
 
   this.minX = 0;
   this.minY = 0;
@@ -130,102 +189,50 @@ function World(name, drawStyle, x, y, mX, mY) {
       interactables: {
         plots: {}, //interactables
         UI: {}, //interactables
-        entities{} //entities
+        entities: {} //entities
       }
-    }
+    },
     colliders: {} //gameobjects
   };
 }
 
-/*****************/
-var buttons = [];
-var texts = [];
-var tiles = [];
-var plots = [];
-var statics = [];
-var resources = [];
-var lastResTick = new Date().getTime();
-var dragging = null;
-$("#gameCanvas").bind('mousemove', function(e) {
-  mX = Math.round(e.pageX - $(this).offset().left);
-  mY = Math.round(e.pageY - $(this).offset().top);
-});
-
+//On click, interact with anything under the mouse
 $("#gameCanvas").click(function() {
   console.log("clicked at: " + mX + " " + mY)
-  if (buttons.filter(function(item) {
-                        if (mX > item.x && mX < item.x+item.width && mY > item.y && mY < item.y+item.height) {
-                          item.clicked();
-                          return true;
-                        }
-                      }).length <= 0) {
-    if (dragging) {
-      dragging.clicked();
-    }
-  }
-})
+  $.each(worldStack[activeWorld].gameObjects.tiles.statics.interactables, function (iKey, item) {
+    $.each(item, function (key, value) {
+      if (mX > value.x &&
+          mX < item.x + item.width &&
+          mY > item.y &&
+          mY < item.y + item.height) {
+        item.interact();
+        if (item.tags.inArray("Plot")) {
+          //TODO: Implement what happens when 'dropping' held item
+          console.log("TODO: Implement what happens when 'dropping' held item");
+        }
+      }
+    });
+  });
+});
 
-//Shortcut for creating a new image cause its a pain
-function createImage(path) {
-  var newImage = new Image();
-  newImage.src = path;
-  return newImage;
+
+/*
+Static(image, x, y, width, height)
+  => Static(name, x, y, width, height, eImage, drawStyle)
+Tile(image, x, y, width, height, action)
+  => actions moved to resources
+Plot(x, y, width, height, allowed) {
+  => im thinking about it...
 }
 
-function Resource(name, value, capacity, isVisible, checkIncrement) {
-  this.name = name,
-  this.value = value,
-  this.capacity = capacity,
-  this.isVivisble = isVisible,
-  this.checkIncrement = checkIncrement
-}
-resources.push(new Resource("Population", 0, 5, false, function () {
-  if (this.value + 1 <= this.capacity) {
-    var foodVal = resources.filter(function(item){return item.name == "Population"})[0].value;
-    if (foodVal - this.value >= 0) {
-      this.value += 1 * plots.filter(function(item){return item.curType == "village0"}).length
-    }
-    else {
-      //BUG: this needs to get the actual item, indexOf wont do it
-      resources[resources.indexOf("Population")].value = this.value;
-    }
-  }
-}));
-resources.push(new Resource("Food", 0, 100, false, function () {
-  this.value += 3 * plots.filter(function(item){return item.curType == "farm"}).length
-  this.value -= resources.filter(function(item){return item.name == "Population"})[0].value
-}));
-
-/**Classes that draw to the canvas typically have a mixture of 3 additional funcs
- * action - run every tick like draw, meant to provide seperation of function from draw
- * draw - draw an image, like action but only for drawing the image saved with the object
- * clicked - what happens when clicked**/
-
-//Draw an image that does nothing
-function Static(image, x, y, width, height) {
-  this.image = image,
-  this.x = x,
-  this.y = y,
-  this.width = width,
-  this.height = height,
-  this.draw = function() { ctx.drawImage(this.image, this.x, this.y, this.width, this.height); }
-}
-
-//Tiles are statics that also have an action that must be done every tick
-function Tile(image, x, y, width, height, action) {
-  this.image = image,
-  this.x = x,
-  this.y = y,
-  this.width = width,
-  this.height = height,
-  this.action = action,
-  this.draw = function() { ctx.drawImage(this.image, this.x, this.y, this.width, this.height); }
-}
+*/
+/*****************/
 
 //Plots are empty spaces where objects can be 'dropped' into
 /**They are also effectively tiles which have a default action - display a guide
  * so it is easier to see the plot, but only if moused over or if an object that
  * the plot accepts is held currently**/
+
 function Plot(x, y, width, height, allowed) {
   this.background = createImage('images/grass-plot-' + width + '.png'),
   this.image = null,
@@ -469,6 +476,8 @@ function mainLoop() {
 
   //draw the world and everything in it
   aWorld.draw();
+
+  requestAnimationFrame(mainLoop);
 }
 
 //Movement Limiter
@@ -544,6 +553,45 @@ function defaultMovement() {
   console.log(this.name + ": " + this.x, ",", this.y)
 }
 
+//Resource AIs
+function popResAI() {
+  var incrementVal = numInPlots('smallVillage');
+  //if will bring over capacity, bring to capacity instead
+  if (this.value + incrementVal > this.capacity) {
+    incrementVal = this.capacity - this.value;
+  }
+  //as long as not already at capacity
+  if (incrementVal > 0) {
+    //if there isn't enough food, only increase up to what there is food for
+    var foodVal = resources['food'];
+    if (foodVal - (this.value + incrementVal) <= 0) {
+      incrementVal = foodVal - this.value;
+    }
+    //increment
+    this.value += incrementVal;
+  }
+}
+
+function foodResAI() {
+  var incrementVal = numInPlots('smallFarm') - resources['population'];
+  //if this increment will bring food negative
+  if (this.value + incrementVal < 0) {
+    //kill off as many pops as aren't fed
+    incrementVal -= this.value;
+    this.value = 0;
+    resource['population'] -= incrementVal;
+  }
+  //or if will bring it over capacity
+  else if (this.value + incrementVal > this.capacity) {
+    //cap it at capacity
+    this.value = this.capacity;
+  }
+  //lastly, if neither
+  else {
+    this.value += incrementVal;
+  }
+}
+
 //Utility functions
 function clear() {
   ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
@@ -552,6 +600,24 @@ function clear() {
 
 function justDraw(key, value) {
   value.draw();
+}
+
+function createImage(path) {
+  var newImage = new Image();
+  newImage.src = path;
+  return newImage;
+}
+
+//returns the number of occurrences of the searched-for tag in plots
+function numInPlots(searchStr) {
+  var ret = 0;
+  keyArr = Object.keys(worldStack[activeWorld].gameObjects.tiles.interactables.plots);
+  for (var key in keyArr) {
+    if (worldStack[activeWorld].gameObjects.tiles.interactables.plots[key].tags.inArray(searchStr)) {
+      ++ret;
+    }
+  }
+  return ret;
 }
 
 //Keypress and Input
@@ -572,8 +638,6 @@ $(document).keyup( function(e)
 
 $(document).ready(function() {
   console.log("Javascript Ready")
-  function update() {
-    mainLoop();
-    requestAnimationFrame(update)
-  }
+  init();
+  mainLoop();
 });
