@@ -142,11 +142,39 @@ $(document).ready(function() {
     this.cHover = cHover;
     this.interact = interact;
   }
-  //Shortcut for Interactable with UI tag
-  function UI(name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact) {
-    Interactable.call(this, name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact);
+  /**
+  UI = a Interactable that can be hovered over and interacted with
+  tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
+  x, y = INT coords
+  width, height = INT img width, height
+  eImage = STR location to image source for entity
+  drawStyle = FUNC function dictating how the entity should be drawn
+  tooltip = STR detailing what the tooltip should say
+  interact = FUNC dictating how to behave when interacted with
+  **/
+  function UI(name, x, y, width, height, eImage, drawStyle, tooltip, interact) {
+    Interactable.call(this, name, x, y, width, height, eImage, drawStyle, UIHover, emptyFunc, interact);
     this.tags.push("UI");
+
+    this.tooltip = tooltip;
   }
+  //Shortcut for UI that is only a textbox
+  //phrase = STR to say in the textbox
+  function TextBox(name, x, y, tooltip, phrase) {
+    UI.call(this, name, x, y, 0, 0, "", textboxDraw, tooltip, emptyFunc);
+    this.tags.push("textbox");
+
+    this.phrase = phrase;
+  }
+  //Shortcut for UI that is a button
+  //selectedImage = STR with location of image when hovered over
+  function Button(name, x, y, width, height, eImage, tooltip, selectedImage, interact) {
+    UI.call(this, name, x, y, width, height, eImage, buttonDraw, tooltip, interact);
+    this.tags.push("button");
+
+    this.selectedImage = createImage(selectedImage);
+  }
+
   /**
   Plot = an interactable that can be hovered over and interacted with for building buildings
   tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
@@ -179,6 +207,30 @@ $(document).ready(function() {
     this.tags.push("entity");
 
     this.move = move;
+  }
+
+  /**
+  DragObject = an Entity that can be held
+  tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
+  x, y = INT coords
+  width, height = INT img width, height
+  eImage = STR location to image source for entity
+  move = FUNC dictating how to move
+  types[] = STR to be concated into tags describing what this DragObject is
+  offX,offY = INT offset based on where the button was clicked
+  **/
+  function DragObject(name, x, y, width, height, eImage, move, type, offX, offY) {
+    Entity.call(this, name, x, y, width, height, eImage, staticDraw, emptyFunc, emptyFunc, draggingInteract, draggingMove);
+    this.tags.push("dragObject");
+    this.tags.concat(type);
+
+    this.offX = offX;
+    this.offY = offY;
+  }
+
+  DragObject.prototype.abort = function() {
+    delete worldStack[activeWorld].gameObjects.tiles.interactables.entities[this.tags[0]];
+    held = null;
   }
 
   /**
@@ -242,95 +294,6 @@ $(document).ready(function() {
   }
   */
   /*****************/
-
-  /**DragObjects are basically fancy buttons that move with the cursor where the
-  * user clicked and are able to be dropped on an appropriate plot**/
-  //They have both action, draw, and clicked
-  function DragObject(type, nextType, image, x, y, width, height, offX, offY) {
-    this.type = type,
-    this.nextType = nextType,
-    this.image = image,
-    this.x = x,
-    this.y = y,
-    this.offX = offX,
-    this.offY = offY,
-    this.width = width,
-    this.height = height,
-    this.action = function() {
-      this.x = mX - this.offX;
-      this.y = mY - this.offY;
-    },
-    this.draw = function() { ctx.drawImage(this.image, this.x, this.y, this.width, this.height); },
-    this.clicked = function() {
-      //check if over a plot
-      if (plots.filter(function(item, index) {
-                          if (mX > item.x && mX < item.x+item.width && mY > item.y && mY < item.y+item.height) {
-                            //since in a plot, check if that plot accepts this type of item
-                            if (item.allowed.filter(function(item){
-                                                      if(item == dragging.type){return true}
-                                                      else{return false}
-                                                    }).length > 0) {
-                              plots[index].image = dragging.image; //set the plot's image to this image
-                              plots[index].curType = dragging.type;
-                              if (plots[index].allowed.indexOf(dragging.nextType) == -1) {
-                                plots[index].allowed.splice(plots[index].allowed.indexOf(dragging.type), 1, dragging.nextType)
-                              }
-                              else {
-                                plots[index].allowed.splice(plots[index].allowed.indexOf(dragging.type), 1)
-                              }
-                              //return true
-                            }
-                            else {
-                              return false
-                            }
-                          }
-                          else {
-                            return false
-                          }
-                        }).length > 0) {
-        //BUG: What does this do?
-        tiles.splice(tiles.indexOf(this),1,new Tile(this.image, this.x, this.y, this.width, this.height, function() {}))
-        dragging = null;
-      }
-      else { //clicked anything besides a valid Plot
-        this.abort();
-        dragging = null;
-      }
-    },
-    this.abort = function() { //remove this tile from the tiles list
-      tiles.splice(tiles.indexOf(this),1);
-    }
-  }
-
-  function Button(image, selectedImage, x, y, width, height, onClick) {
-    this.image = image,
-    this.selectedImage = selectedImage,
-    this.x = x,
-    this.y = y,
-    this.width = width,
-    this.height = height,
-    this.clicked = onClick,
-    this.draw = function () {
-      if (mX > this.x && mX < this.x+this.width && mY > this.y && mY < this.y+this.height) {
-        ctx.drawImage(this.selectedImage, this.x, this.y, this.width, this.height);
-      }
-      else {
-        ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
-      }
-    }
-  }
-
-  function Text(phrase, x, y) {
-    this.phrase = phrase,
-    this.x = x,
-    this.y = y,
-    this.draw = function() {
-      //ctx.font="30px 8-BIT"
-      ctx.font="30px Arial"
-      ctx.fillStyle="#fff"
-      ctx.fillText(this.phrase, this.x, this.y)
-    }
-  }
 
   function Counter(phrase, x, y, update) {
     this.phrase = phrase,
@@ -517,6 +480,22 @@ $(document).ready(function() {
     }
   }
 
+  function textboxDraw() {
+    //ctx.font="30px 8-BIT"
+    ctx.font="30px Arial"
+    ctx.fillStyle="#fff"
+    ctx.fillText(this.phrase, this.x, this.y)
+  }
+
+  function buttonDraw() {
+    if (mouseIn(this.x, this.y, this.x + this.width, this.y + this.height)) {
+      ctx.drawImage(this.selectedImage, this.x, this.y, this.width, this.height);
+    }
+    else {
+      ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    }
+  }
+
   //Movement AIs
   function defaultMovement() {
     speed = 5;
@@ -543,6 +522,11 @@ $(document).ready(function() {
     console.log(this.name + ": " + this.x, ",", this.y)
   }
 
+  function draggingMove() {
+    this.x = mX - this.offX;
+    this.y = mY - this.offY;
+  }
+
   //MHover AIs
   function plotMHover() {
     if (held != null &&
@@ -552,6 +536,10 @@ $(document).ready(function() {
     else if (held == null) { //if mouse over but not held
       ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
     }
+  }
+  function UIHover() {
+    //TODO: tooltip on hovered
+    console.log("TODO: tooltip on hovered");
   }
 
   //CHover AIs
@@ -564,6 +552,21 @@ $(document).ready(function() {
   function plotInteract() {
     //TODO: something for plotInteract
     console.log("TODO: something for plotInteract");
+  }
+
+  function draggingInteract() {
+    $.each(worldStack[activeWorld].gameObjects.tiles.interactables.plots, function (key, value) {
+      if (mouseIn(value.x, value.y, value.x + value.width, value.y + value.height)) {
+        for (var item in value.allowed) {
+          if (this.tags.inArray(item)) {
+            value.image = this.image;
+            //TODO: figure out how to handle tags at this point
+            console.log("TODO: figure out how to handle tags at this point");
+          }
+        }
+      }
+    });
+    this.abort();
   }
 
   //Resource AIs
@@ -634,6 +637,8 @@ $(document).ready(function() {
   function mouseIn(minX,minY,maxX,maxY) {
     return coordsIn(minX,minY,maxX,maxY,mX,mY);
   }
+
+  function emptyFunc() { return; }
 
   //returns the number of occurrences of the searched-for tag in plots
   function numInPlots(searchStr) {
