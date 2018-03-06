@@ -18,7 +18,7 @@ ex: town (outdoors), tavern, home, etc.
 - - tiles{...}: renderable objects - accepts draw function (allowing animation)
 - - - statics{Tile}: base renderable, nothing fancy
 - - - interactables{...}: accept a mHover, cHover for when mouse or character are over
-- - - - plots{Interactable}: interactable and show highlight on hover
+- - - - plots{Plot}: interactable and show highlight on hover
 - - - - UI{Interactable}: clickable or information-bearing elements - absolutely positioned
 - - - - entities{Entity}: accept a move function, interactable
 - - colliders{GameObject}: non-renderable GameObjects, block movement if in this object
@@ -54,8 +54,11 @@ function init() {
   //Initializing town world
   worldStack['town'] = new World("town", basicWorldDraw("sky.png"), 0, 0, canvas.width, canvas.height);
   var activeWorld = 'town';
+
   resources['population'] = new Resource("Population", 0, 5, false, popResAI);
   resources['food'] = new Resource("Food", 0, 100, false, foodResAI);
+
+  worldStack[activeWorld].gameObjects.tiles.interactables.plots['plot0'] = new Plot("plot0", 172, 144, 128, 128, 'images/grass-plot-128.png', ["<todo: add allowed>"])
 }
 
 /**
@@ -135,15 +138,23 @@ function Interactable(name, x, y, width, height, eImage, drawStyle, mHover, cHov
   this.cHover = cHover;
   this.interact = interact;
 }
-//Shortcut for Interactable with Plot tag
-function Plot(name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact) {
-  Interactable.call(this, name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact);
-  this.tags.append("plot");
-}
 //Shortcut for Interactable with UI tag
 function UI(name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact) {
   Interactable.call(this, name, x, y, width, height, eImage, drawStyle, mHover, cHover, interact);
   this.tags.append("UI");
+}
+/**
+Plot = an interactable that can be hovered over and interacted with for building buildings
+tags[] = STR tags that apply to this object S.T. tags[0] is the object's key
+x, y = INT coords
+width, height = INT img width, height
+eImage = STR location to image source for entity
+allowed[] = STR tags that are allowed
+**/
+function Plot(name, x, y, width, height, eImage, allowed) {
+  Interactable.call(this, name, x, y, width, height, eImage, plotDraw, plotMHover, plotCHover, plotInteract);
+  this.allowed = allowed;
+  this.tags.append("plot");
 }
 
 
@@ -215,7 +226,6 @@ $("#gameCanvas").click(function() {
   });
 });
 
-
 /*
 Static(image, x, y, width, height)
   => Static(name, x, y, width, height, eImage, drawStyle)
@@ -224,65 +234,8 @@ Tile(image, x, y, width, height, action)
 Plot(x, y, width, height, allowed) {
   => im thinking about it...
 }
-
 */
 /*****************/
-
-//Plots are empty spaces where objects can be 'dropped' into
-/**They are also effectively tiles which have a default action - display a guide
- * so it is easier to see the plot, but only if moused over or if an object that
- * the plot accepts is held currently**/
-
-function Plot(x, y, width, height, allowed) {
-  this.background = createImage('images/grass-plot-' + width + '.png'),
-  this.image = null,
-  this.x = x,
-  this.y = y,
-  this.width = width,
-  this.height = height,
-  this.curType = "",
-  this.action = function () { //for overlays and highlighting due to mouse interaction
-    if (mX > this.x && mX < this.x+this.width && mY > this.y && mY < this.y+this.height) {
-      if (dragging != null && this.allowed.filter(function(item) { return item == dragging.type;}).length > 0) { //if dragging over a valid plot
-        ctx.drawImage(createImage("images/highlight.png"), this.x, this.y, this.width, this.height)
-      }
-      else if (dragging == null) { //if mouse over but not dragging
-        ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
-      }
-    }
-    else { //if dragging but not over this particular plot
-      if (dragging != null && this.allowed.filter(function(item) { return item == dragging.type;}).length > 0) {
-        ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
-      }
-    }
-  },
-  this.draw = function() { //for drawing the actual image assigned to this Plot
-    ctx.drawImage(this.background, this.x, this.y, this.width, this.height);
-    if (this.image) { ctx.drawImage(this.image, this.x, this.y, this.width, this.height); }
-  }
-  this.allowed = allowed
-}
-
-plots.push(new Plot(172,144,128,128,['village0']));
-plots.push(new Plot(450,272,128,128,['farm']));
-plots.push(new Plot(600,144,128,128,['village1', 'village0']));
-plots.push(new Plot(204, 304, 128, 128, ['farm']));
-
-/**
-  TODO: Plots will be used for the building locations,
-   * Action should be if mouse over and dragging is not null,
-   * display a highlighted area showing where that draggable
-   * item can be dropped. Update DragObject.clicked to loop
-   * through Plots and, similar to canvas.click, find which
-   * one it is over before dropping there if allowed.
-
-   * Consider making it such that you can only have one item in each
-   * plot, and that the item will sit in a designated location
-   * on the plot after it is dropped on the plot.
-
-   * ALSO TODO: Instead of createImage'ing every time you need it, make an array
-   * or object containing each unique image
-**/
 
 /**DragObjects are basically fancy buttons that move with the cursor where the
 * user clicked and are able to be dropped on an appropriate plot**/
@@ -474,6 +427,19 @@ function mainLoop() {
     value.move();
   });
 
+  $.each(aWorld.gameObjects.tiles.interactables, function(key, value) {
+    $.each(value, function(key, value) {
+      //mHover
+      if (mouseIn(value.x,value.y,value.x+value.width,value.y+value.height)) {
+        value.mHover();
+      }
+      //cHover
+      if (coordsIn(value.x,value.y,value.x+value.width,value.y+value.height,entities['character'].x,entities['character'].y)) {
+        value.cHover();
+      }
+    })
+  })
+
   //draw the world and everything in it
   aWorld.draw();
 
@@ -527,6 +493,14 @@ function basicWorldDraw(bgImage) {
   $.each(this.gameObjects.tiles.interactables.UI, justDraw(key, value));
 }
 
+function plotDraw() {
+  ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+
+  if (dragging != null && this.allowed.filter(function(item) { return item == dragging.type;}).length > 0) {
+    ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
+  }
+}
+
 //Movement AIs
 function defaultMovement() {
   speed = 5;
@@ -551,6 +525,29 @@ function defaultMovement() {
     this.y += boundMovement(3,this,speed);
   }
   console.log(this.name + ": " + this.x, ",", this.y)
+}
+
+//MHover AIs
+function plotMHover() {
+  if (dragging != null &&
+      this.allowed.filter(function(item) { return held.tags.inArray(item); }).length > 0) { //if dragging over a valid plot
+    ctx.drawImage(createImage("images/highlight.png"), this.x, this.y, this.width, this.height)
+  }
+  else if (dragging == null) { //if mouse over but not dragging
+    ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
+  }
+}
+
+//CHover AIs
+function plotCHover() {
+  //TODO: something for plotCHover
+  console.log("TODO: something for plotCHover");
+}
+
+//Interact AIs
+function plotInteract() {
+  //TODO: something for plotInteract
+  console.log("TODO: something for plotInteract");
 }
 
 //Resource AIs
@@ -606,6 +603,20 @@ function createImage(path) {
   var newImage = new Image();
   newImage.src = path;
   return newImage;
+}
+
+function coordsIn(minX,minY,maxX,maxY,cX,cY) {
+  if (cX > minX &&
+      cX < maxX &&
+      cY > minY &&
+      cY < maxY) {
+    return true;
+  }
+  return false;
+}
+
+function mouseIn(minX,minY,maxX,maxY) {
+  return coordsIn(minX,minY,maxX,maxY,mX,mY);
 }
 
 //returns the number of occurrences of the searched-for tag in plots
