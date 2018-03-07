@@ -53,21 +53,20 @@ $(document).ready(function() {
   var held = null;
 
   //Initializing town world
-  worldStack['town'] = new World("town", basicWorldDraw, 0, 0, canvas.width, canvas.height, {bgImage: createImage("images/sky.png")});
+  worldStack['town'] = new World("town", basicWorldDraw, 0, 0, canvas.width, canvas.height, {bgImage: createImage("images/grass-32.png")});
   var activeWorld = 'town';
 
   resources['population'] = new Resource("Population", 0, 5, false, popResAI);
   resources['food'] = new Resource("Food", 0, 100, false, foodResAI);
 
-  worldStack[activeWorld].gameObjects.tiles.interactables.plots['plot0'] = new Plot("plot0", 172, 144, 128, 128, 'images/grass-plot-128.png', ["<todo: add allowed>"]);
+  worldStack[activeWorld].gameObjects.tiles.interactables.plots['plot0'] = new Plot("plot0", 172, 144, 128, 128, 'images/grass-plot-128.png', ["village"]);
 
   //TODO: small village tool tip
   worldStack[activeWorld].gameObjects.tiles.interactables.UI['smallVillageButton'] = new Button("smallVillageButton", 32, 432, 96, 96, "images/village128-Button.png", "TODO: small village tool tip", "images/village128-ButtonSelected.png", ['village'], buttonInteract);
   worldStack[activeWorld].gameObjects.tiles.interactables.UI['smallOvenButton'] = new Button("smallOvenButton", 160, 432, 96, 96, "images/ovenT1-Button.png", "TODO: small oven tool tip", "images/ovenT1-ButtonSelected.png", ['oven'], buttonInteract);
 
-  //TODO: poptext tooltip
-  worldStack[activeWorld].gameObjects.tiles.interactables.UI['populationTextBox'] = new TextBox("populationTextBox", canvas.width/100, canvas.height/6, "TODO: poptext tooltip", "Population: ", "population");
-  worldStack[activeWorld].gameObjects.tiles.interactables.UI['foodTextBox'] = new TextBox("foodTextBox", canvas.width/100, canvas.height/4, "TODO: foodtext tooltip", "Food: ", "food");
+  worldStack[activeWorld].gameObjects.tiles.interactables.UI['populationTextBox'] = new TextBox("populationTextBox", canvas.width/100, canvas.height/16, "Population: ", "population");
+  worldStack[activeWorld].gameObjects.tiles.interactables.UI['foodTextBox'] = new TextBox("foodTextBox", canvas.width/100, canvas.height/8, "Food: ", "food");
 
   /**************
    ** THE REST **
@@ -168,8 +167,8 @@ $(document).ready(function() {
   }
   //Shortcut for UI that is only a textbox
   //phrase = STR to say in the textbox
-  function TextBox(name, x, y, tooltip, phrase, resourceName) {
-    UI.call(this, name, x, y, 0, 0, "", textboxDraw, tooltip, emptyFunc);
+  function TextBox(name, x, y, phrase, resourceName) {
+    UI.call(this, name, x, y, 0, 0, "", textboxDraw, "", emptyFunc);
     this.tags.push("textbox");
 
     this.phrase = phrase;
@@ -232,7 +231,7 @@ $(document).ready(function() {
   function DragObject(name, x, y, width, height, eImage, move, type, offX, offY) {
     Entity.call(this, name, x, y, width, height, eImage, staticDraw, emptyFunc, emptyFunc, draggingInteract, draggingMove);
     this.tags.push("dragObject");
-    this.tags.concat(type);
+    this.tags = $.merge(this.tags, type);
 
     this.offX = offX;
     this.offY = offY;
@@ -262,6 +261,7 @@ $(document).ready(function() {
 
     this.gameObjects = {
       tiles: {
+        overlays: {}, //tiles
         statics: {}, //tiles
         interactables: {
           plots: {}, //interactables
@@ -278,14 +278,14 @@ $(document).ready(function() {
   //On click, interact with anything under the mouse
   $("#gameCanvas").click(function() {
     console.log("clicked at: " + mX + " " + mY)
-    $.each(worldStack[activeWorld].gameObjects.tiles.statics.interactables, function (iKey, item) {
+    $.each(worldStack[activeWorld].gameObjects.tiles.interactables, function (iKey, item) {
       $.each(item, function (key, value) {
         if (mX > value.x &&
-            mX < item.x + item.width &&
-            mY > item.y &&
-            mY < item.y + item.height) {
-          item.interact();
-          if ($.inArray("Plot", item.tags) >= 0) {
+            mX < value.x + value.width &&
+            mY > value.y &&
+            mY < value.y + value.height) {
+          value.interact();
+          if ($.inArray("plot", value.tags) >= 0) {
             //TODO: Implement what happens when 'dropping' held item
             console.log("TODO: Implement what happens when 'dropping' held item");
           }
@@ -379,18 +379,25 @@ $(document).ready(function() {
     if (Object.keys(tilesObj.interactables.plots).length > 0) {
       $.each(this.gameObjects.tiles.interactables.plots, justDraw);
     }
-    if (Object.keys(tilesObj.interactables.entities).length > 0) {
-      $.each(this.gameObjects.tiles.interactables.entities, justDraw);
+    if (Object.keys(tilesObj.overlays).length > 0) {
+      $.each(this.gameObjects.tiles.overlays, justDraw)
     }
     if (Object.keys(tilesObj.interactables.UI).length > 0) {
       $.each(this.gameObjects.tiles.interactables.UI, justDraw);
     }
+    if (Object.keys(tilesObj.interactables.entities).length > 0) {
+      $.each(this.gameObjects.tiles.interactables.entities, justDraw);
+    }
+  }
+
+  function basicDraw() {
+    ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
   }
 
   function plotDraw() {
     ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
 
-    if (held != null && this.allowed.filter(function(item) { return $.inArray(item, held.tags); }).length > 0) {
+    if (held != null && this.allowed.filter(function(item) { return $.inArray(item, held.tags) >= 0; }).length > 0) {
       ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
     }
   }
@@ -399,7 +406,7 @@ $(document).ready(function() {
     //ctx.font="30px 8-BIT"
     ctx.font="30px Arial"
     ctx.fillStyle="#fff"
-    ctx.fillText(this.phrase + resources[this.resourceName], this.x, this.y)
+    ctx.fillText(this.phrase + resources[this.resourceName].value + "/" + resources[this.resourceName].capacity, this.x, this.y)
   }
 
   function buttonDraw() {
@@ -444,12 +451,11 @@ $(document).ready(function() {
 
   //MHover AIs
   function plotMHover() {
-    if (held != null &&
-        this.allowed.filter(function(item) { return $.inArray(item, held.tags); }).length > 0) { //if held over a valid plot
-      ctx.drawImage(createImage("images/highlight.png"), this.x, this.y, this.width, this.height)
+    if (held == null) { //if mouse over but not held
+      worldStack[activeWorld].gameObjects.tiles.overlays[this.tags[0]] = new Static(this.tags[0], this.x, this.y, this.width, this.height, 'images/overlay.png', basicDraw);
     }
-    else if (held == null) { //if mouse over but not held
-      ctx.drawImage(createImage("images/overlay.png"), this.x, this.y, this.width, this.height)
+    else if (this.allowed.filter(function(item) { return $.inArray(item, held.tags) >= 0; }).length > 0) { //if held over a valid plot
+      worldStack[activeWorld].gameObjects.tiles.overlays[this.tags[0]] = new Static(this.tags[0], this.x, this.y, this.width, this.height, 'images/highlight.png', basicDraw);
     }
   }
 
@@ -489,7 +495,7 @@ $(document).ready(function() {
     if (held != null) {
       held.abort();
     }
-    held = new DragObject(this.tags[0], mX, mY, 96, 96, this.image.src, draggingMove, typeContained, mX - this.x, mY - this.y);
+    held = new DragObject(this.tags[0], mX, mY, 96, 96, this.image.src, draggingMove, this.typeContained, mX - this.x, mY - this.y);
     worldStack[activeWorld].gameObjects.tiles.interactables.entities[this.tags[0]] = held;
   }
 
@@ -513,13 +519,13 @@ $(document).ready(function() {
   }
 
   function foodResAI() {
-    var incrementVal = numInPlots('smallFarm') - resources['population'];
+    var incrementVal = numInPlots('smallFarm') - resources['population'].value;
     //if this increment will bring food negative
     if (this.value + incrementVal < 0) {
       //kill off as many pops as aren't fed
       incrementVal -= this.value;
       this.value = 0;
-      resource['population'] -= incrementVal;
+      resource['population'].value -= incrementVal;
     }
     //or if will bring it over capacity
     else if (this.value + incrementVal > this.capacity) {
@@ -534,6 +540,7 @@ $(document).ready(function() {
 
   //Utility functions
   function clear() {
+    worldStack[activeWorld].gameObjects.tiles.overlays = {};
     ctx.setTransform(1,0,0,1,0,0);//reset the transform matrix as it is cumulative
     ctx.clearRect(0, 0, canvas.width, canvas.height);//clear the viewport after matrix is reset
   }
